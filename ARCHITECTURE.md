@@ -1,5 +1,44 @@
 # Architecture Overview
 
+## Module Structure
+
+This Terraform module provides a complete, production-ready deployment that creates the following structure:
+
+```
+agentcore-terraform-module/
+├── Root Module (4 files, ~500 lines)
+│   ├── main.tf           - Module orchestration
+│   ├── variables.tf      - 25+ input variables
+│   ├── outputs.tf        - 10+ outputs
+│   └── versions.tf       - Provider constraints
+│
+├── Modules (6 modules, ~2000 lines)
+│   ├── vpc/              - VPC, subnets, NAT Gateway (3 files)
+│   ├── storage/          - S3 buckets, KMS encryption (3 files)
+│   ├── alb/              - ALB, ACM, OIDC listeners (3 files)
+│   ├── identity/         - AgentCore workload identity (3 files)
+│   ├── ecs/              - ECS cluster, services, IAM (3 files)
+│   └── waf/              - WAF rules, rate limiting (3 files)
+│
+├── Examples
+│   └── complete/         - Full deployment example
+│       ├── main.tf                      - ECR + module invocation
+│       ├── variables.tf                 - Variable definitions
+│       ├── terraform.tfvars.example     - Configuration template
+│       ├── deploy.sh                    - Automated deployment
+│       ├── destroy.sh                   - Clean teardown
+│       └── README.md                    - Deployment guide
+│
+└── Documentation
+    ├── README.md              - Module overview
+    ├── ARCHITECTURE.md        - This file
+    ├── CDK_VS_TERRAFORM.md    - CDK comparison
+    ├── GETTING_STARTED.md     - Step-by-step guide
+    └── .gitignore             - Standard ignore patterns
+
+Total: ~30 files, ~3,500 lines of code
+```
+
 ## High-Level Architecture
 
 ```
@@ -195,6 +234,15 @@
 - S3 lifecycle policies (Glacier, expiration)
 - 7-day log retention
 
+### Monthly Cost Estimate
+
+Approximate monthly costs in us-east-1:
+- **ECS Fargate** (2 tasks): ~$30
+- **Application Load Balancer**: ~$20
+- **NAT Gateway**: ~$35
+- **S3, CloudWatch, KMS**: ~$10
+- **Total**: ~$95/month
+
 ### Additional Recommendations
 - Use Compute Savings Plans for Fargate
 - Enable S3 Intelligent-Tiering
@@ -300,3 +348,136 @@
   - CloudWatch Logs retention
   - Unused resources
   - Fargate task sizes
+
+## Deployment Guide
+
+### Prerequisites
+
+Before deploying, ensure you have:
+
+1. **AWS Account** with appropriate IAM permissions
+2. **Terraform** >= 1.5 installed
+3. **AWS CLI** configured with credentials
+4. **Docker** installed and running
+5. **Route53 Hosted Zone** for your domain
+6. **Cognito User Pool** with app client configured
+7. **GitHub OAuth Provider** registered with AgentCore Identity (if using existing)
+
+### Deployment Options
+
+#### Option 1: Automated Deployment Script
+
+```bash
+cd examples/complete
+./deploy.sh
+```
+
+The script will:
+1. Check prerequisites (Terraform, AWS CLI, Docker)
+2. Initialize Terraform
+3. Show execution plan
+4. Deploy base infrastructure
+5. Guide you through Docker image building
+6. Deploy ECS services
+7. Configure Cognito callback URLs
+
+#### Option 2: Manual Deployment
+
+```bash
+cd examples/complete
+
+# Step 1: Copy example config
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your values
+
+# Step 2: Initialize Terraform
+terraform init
+
+# Step 3: Deploy base infrastructure (ECS will fail - no images yet)
+terraform apply
+
+# Step 4: Build and push Docker images
+AWS_REGION=us-east-1
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+# ECR login
+aws ecr get-login-password --region $AWS_REGION | \
+  docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+
+# Get repository URLs
+AGENT_REPO=$(terraform output -raw ecr_agent_repository_url)
+SESSION_REPO=$(terraform output -raw ecr_session_binding_repository_url)
+
+# Build and push
+cd backend
+docker build -t $AGENT_REPO:latest -f runtime/Dockerfile runtime/
+docker push $AGENT_REPO:latest
+
+docker build -t $SESSION_REPO:latest -f session_binding/Dockerfile session_binding/
+docker push $SESSION_REPO:latest
+
+# Step 5: Deploy ECS services (will succeed now)
+cd ..
+terraform apply
+
+# Step 6: Update Cognito with callback URL
+CALLBACK_URL=$(terraform output -raw cognito_callback_url)
+POOL_ID="your-pool-id"  # From terraform.tfvars
+CLIENT_ID="your-client-id"  # From terraform.tfvars
+
+aws cognito-idp update-user-pool-client \
+  --user-pool-id $POOL_ID \
+  --client-id $CLIENT_ID \
+  --callback-urls "$CALLBACK_URL" \
+  --supported-identity-providers "COGNITO" \
+  --allowed-o-auth-flows "code" \
+  --allowed-o-auth-scopes "openid" "email" "profile" \
+  --allowed-o-auth-flows-user-pool-client
+```
+
+### Testing Your Deployment
+
+```bash
+# Get agent URL
+AGENT_URL=$(terraform output -raw agent_url)
+
+# Test health check
+curl -I $AGENT_URL/docs
+
+# Open in browser
+echo "Open this URL: $AGENT_URL/docs"
+```
+
+You should see a redirect to Cognito login. After authentication, you'll access the agent API.
+
+### Cleanup
+
+```bash
+cd examples/complete
+./destroy.sh
+```
+
+Or manually:
+
+```bash
+# Empty S3 buckets first
+aws s3 rm s3://$(terraform output -raw s3_sessions_bucket) --recursive
+aws s3 rm s3://$(terraform output -raw s3_access_logs_bucket) --recursive
+
+# Destroy infrastructure
+terraform destroy
+```
+
+## Security Features
+
+This module implements comprehensive security controls:
+
+- ✅ **Encryption at Rest**: All data encrypted with KMS (S3, CloudWatch Logs)
+- ✅ **Encryption in Transit**: TLS 1.3 enforced on ALB, HTTPS for all API calls
+- ✅ **Secrets Management**: Cognito credentials stored in AWS Secrets Manager
+- ✅ **Network Isolation**: ECS tasks in private subnets with no direct internet access
+- ✅ **WAF Protection**: Rate limiting and AWS Managed Rules
+- ✅ **IAM Least Privilege**: Scoped permissions for each service
+- ✅ **Session Isolation**: Per-user session data stored separately in S3
+- ✅ **OIDC Authentication**: Cognito-based user authentication via ALB
+- ✅ **Audit Logging**: CloudWatch Logs and ALB access logs
