@@ -1,0 +1,32 @@
+# Project Configuration
+project_name = "agentcore"
+environment  = "prod"
+aws_region   = "us-east-1"
+
+# DNS Configuration
+domain_name     = ""  # Your Route53 domain (e.g., "example.com")
+hosted_zone_id  = ""  # Your Route53 hosted zone ID (e.g., "Z1234567890ABC")
+agent_subdomain = ""  # Subdomain for agent (e.g., "agent" or "agent-3lo")
+
+# Cognito OIDC Configuration
+cognito_user_pool_id   = ""  # Your Cognito user pool ID (e.g., "us-east-1_xxxxxxxxx")
+cognito_client_id      = ""  # Your Cognito app client ID
+cognito_client_secret  = ""  # Your Cognito app client secret
+cognito_domain         = ""  # Your Cognito domain (e.g., "your-app.auth.us-east-1.amazoncognito.com")
+cognito_issuer         = ""  # Your Cognito issuer URL (e.g., "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxxxxxxxx")
+
+# AgentCore Identity
+workload_identity_name = "agent-id-terraform"
+create_workload_identity = true   # Create new workload identity with Terraform
+github_provider_name   = ""       # GitHub OAuth provider name (e.g., "github-oauth-client-xxxxx")
+create_github_provider = false    # Set to true to create new GitHub provider, false to use existing
+
+# GitHub OAuth Configuration (only if create_github_provider = true)
+github_client_id     = ""  # GitHub OAuth App Client ID (optional)
+github_client_secret = ""  # GitHub OAuth App Client Secret (optional)
+
+# Bedrock
+inference_profile_id = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+
+# Optional Features
+enable_waf = false
