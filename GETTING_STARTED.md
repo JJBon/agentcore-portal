@@ -224,7 +224,6 @@ terraform destroy
 
 - **Documentation**: See [README.md](../../README.md)
 - **Architecture**: See [ARCHITECTURE.md](../../ARCHITECTURE.md)
-- **CDK Comparison**: See [CDK_VS_TERRAFORM.md](../../CDK_VS_TERRAFORM.md)
 - **Issues**: File issues on GitHub
 
 ## Security Checklist

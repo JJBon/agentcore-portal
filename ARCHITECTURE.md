@@ -32,7 +32,6 @@ agentcore-terraform-module/
 └── Documentation
     ├── README.md              - Module overview
     ├── ARCHITECTURE.md        - This file
-    ├── CDK_VS_TERRAFORM.md    - CDK comparison
     ├── GETTING_STARTED.md     - Step-by-step guide
     └── .gitignore             - Standard ignore patterns
 
